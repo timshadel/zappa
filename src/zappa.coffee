@@ -112,9 +112,25 @@ zappa.app = (func) ->
   ws_handlers = {}
   helpers = {}
   postrenders = {}
+  session_key = 'connect.sid'
   
   app = context.app = express.createServer()
   io = context.io = socketio.listen(app)
+
+  # Let Socket.IO know which Express session this socket is associated with
+  # Session variables can't be accessed by Socket.IO, but it allows Express
+  # actions to emit to all sockets associated with this session.
+  io.set 'authorization', (data, accept) ->
+    cookieParser = express.cookieParser()
+    cookieParser data, null, (error) ->
+      if error
+        log "Problem extracting sessionId: ", error
+      else if not data.cookies[session_key]?
+        log "No session cookie found."
+      else
+        data.sessionId = data.cookies[session_key]
+      # Always authorize, even without a cookie
+      accept(null, true);
 
   # Reference to the zappa client, the value will be set later.
   client = null
@@ -203,6 +219,9 @@ zappa.app = (func) ->
     wrappers =
       static: (p = path.join(context.root, '/public')) ->
         express.static(p)
+      session: (options = {}) ->
+        session_key = options['key'] ? session_key
+        express.session(options)
 
     use = (name, arg = null) ->
       if wrappers[name]
@@ -254,6 +273,10 @@ zappa.app = (func) ->
           next: next
           send: -> res.send.apply res, arguments
           redirect: -> res.redirect.apply res, arguments
+          emit: ->
+            if req.session?
+              set = io.sockets.in(req.session.id)
+              set.emit.apply set, arguments if set?
           render: ->
             if typeof arguments[0] isnt 'object'
               render.apply @, arguments
@@ -319,6 +342,11 @@ zappa.app = (func) ->
   
   # Register socket.io handlers.
   io.sockets.on 'connection', (socket) ->
+    # Make this socket join the session's room
+    # See http://www.danielbaulig.de/socket-ioexpress/
+    if socket.handshake.sessionId
+      socket.join(socket.handshake.sessionId)
+
     c = {}
     
     build_ctx = ->
