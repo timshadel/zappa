@@ -5,8 +5,13 @@ request = require 'request'
 jsdom = require 'jsdom'
 io = require 'socket.io-client'
 
+# socket.io-client is normally used in a browser, so it would normally send the
+# 'connect.sid' cookie with it. Override it here to send it in our tests.
+_req = io.util.request
+
 class Client
   constructor: (arg) ->
+    @cookies = {}
     if typeof arg is 'string'
       @url = arg
       @parsed = url.parse arg
@@ -36,9 +41,15 @@ class Client
     opts.url = "http://#{@host}:#{@port}#{path}"
     opts.encoding ?= 'utf8'
 
-    req = request opts, (err, res) ->
+    req = request opts, (err, res) =>
       if err and cb? then cb(err)
       else
+        # Hacky cookie support...
+        if res.headers?["set-cookie"]?[0]?
+          [key, value] = res.headers?["set-cookie"]?[0]?.split?("; ")?[0]?.split?("=")
+          if value?
+            @cookies[key] = value
+        
         if opts.dom?
           jsdom.env html: res.body, done: (err, window) ->
             if err and cb? then cb(err)
@@ -50,8 +61,16 @@ class Client
   post: (args...) -> @request 'post', args...
   put: (args...) -> @request 'put', args...
   del: (args...) -> @request 'delete', args...
-  
-  connect: -> @socket = io.connect("http://#{@host}:#{@port}")
+
+  connect: ->
+    io.util.request = (xdomain) =>
+      xhr = _req xdomain
+      if Object.keys(@cookies).length > 0
+        cookieString = ("#{key}=#{value}" for key, value of @cookies).join("; ")
+        console.log "Cookie: ", cookieString
+        xhr.setRequestHeader "Cookie", cookieString
+      xhr
+    @socket = io.connect "http://#{@host}:#{@port}"
   on: -> @socket.on.apply @socket, arguments
   emit: -> @socket.emit.apply @socket, arguments
 
