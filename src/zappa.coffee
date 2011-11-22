@@ -501,3 +501,4 @@ module.exports.run = zappa.run
 module.exports.app = zappa.app
 module.exports.adapter = zappa.adapter
 module.exports.version = zappa.version
+module.exports.express = express
