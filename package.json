@@ -24,6 +24,9 @@
   "keywords": ["framework", "websockets", "coffeescript", "express", "socket.io", "sammy", "sinatra", "dsl"],
   "main": "./lib/zappa",
   "engines": { "node": ">= 0.4.7" },
+  "scripts": {
+    "postinstall": "cake setup"
+  },
   "contributors": [
     "Nicholas Kinsey <nicholas.kinsey@feistystudios.com>",
     "Jae Kwon <jae@flywheelnetworks.com>",
